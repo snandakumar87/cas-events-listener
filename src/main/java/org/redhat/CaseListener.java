@@ -1,14 +1,18 @@
 package org.redhat;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonAppend;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.jbpm.casemgmt.api.event.*;
 
 import java.util.Date;
 import java.util.EventListener;
 import java.util.Properties;
+import java.util.concurrent.Future;
 
 public class CaseListener implements CaseEventListener {
 
@@ -23,23 +27,23 @@ public class CaseListener implements CaseEventListener {
 
     private void pushToKafka(CaseDefinition caseDefinition) {
         try {
-            String boostrapServers = "localhost:9092";
-            Properties properties= new Properties();
+            Future<RecordMetadata> out = producer.send(new ProducerRecord<String,
+                    String>("case_events", caseDefinition.getCaseId(), new ObjectMapper().writeValueAsString(caseDefinition)));
 
-            properties.setProperty(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,boostrapServers);
-            properties.setProperty(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
-            properties.setProperty(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
 
-            KafkaProducer<String,String> producer = new KafkaProducer<String, String>(properties);
-            ProducerRecord<String,String> record= new ProducerRecord<String, String>("case_events",mapper.writeValueAsString(caseDefinition));
-            producer.send(record);
 
-            producer.flush();
-
-            producer.close();
         } catch (JsonProcessingException e) {
             e.printStackTrace();
         }
+    }
+
+    @Override
+    public void finalize() {
+        System.out.println("case listener clean up");
+            producer.flush();
+
+            producer.close();
+
     }
 
     @Override
@@ -75,11 +79,19 @@ public class CaseListener implements CaseEventListener {
     }
 
     com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    Properties properties = null;
+    KafkaProducer<String,String> producer = null;
 
-    void CaseEventListener(){
+    public CaseListener() {
+        System.out.println("startup case listener");
+        String boostrapServers = "localhost:9092";
+        properties= new Properties();
 
+        properties.setProperty(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,boostrapServers);
+        properties.setProperty(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        properties.setProperty(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
 
+        producer = new KafkaProducer<String, String>(properties);
 
     }
-
 }
